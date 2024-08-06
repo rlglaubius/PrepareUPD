@@ -85,6 +85,14 @@ prepare_srb = function(wpp_revision, rds_name) {
   cat(sprintf("done\n"))
 }
 
+prepare_fertility_by_age = function(wpp_revision, rds_name) {
+  cat(sprintf("- preparing proportionate age-specific fertility data..."))
+  data_path = sprintf("data/%s", wpp_revision)
+  pasfr_data = read_indicator_by_age_year(sprintf("%s/percentASFR.txt", data_path))
+  saveRDS(pasfr_data, sprintf("%s/%s", data_path, rds_name))
+  cat(sprintf("done\n"))
+}
+
 prepare_rds = function(wpp_revision="2024") {
   cat(sprintf("processing revision %s\n", wpp_revision))
   # prepare_metadata("data/WPP2022_metadata.rds")
@@ -92,7 +100,7 @@ prepare_rds = function(wpp_revision="2024") {
   prepare_life_table(wpp_revision, "life-table.rds")
   prepare_tfr(wpp_revision, "tfr.rds")
   prepare_srb(wpp_revision, "srb.rds")
-  # prepare_fertility_by_age("data/WPP2022_Fertility_by_Age1.rds")
+  prepare_fertility_by_age(wpp_revision, "pasfr.rds")
   # prepare_net_migration("data/migration.rds")
 }
 

@@ -8,9 +8,8 @@ wpp_init = function(wpp_revision="2024") {
     population = readRDS(sprintf("%s/population.rds", data_path)),
     life_table = readRDS(sprintf("%s/life-table.rds", data_path)),
     tfr        = readRDS(sprintf("%s/tfr.rds", data_path)),
-    srb        = readRDS(sprintf("%s/srb.rds", data_path))
-    # ind_data  = readRDS("data/WPP2022_Demographic_Indicators_Medium.rds"),
-    # asfr_data = readRDS("data/WPP2022_Fertility_by_Age1.rds"),
+    srb        = readRDS(sprintf("%s/srb.rds", data_path)),
+    pasfr_data = readRDS(sprintf("%s/pasfr.rds", data_path))
     # migr_data = readRDS("data/migration.rds")
   ))
 }
@@ -81,8 +80,8 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
     basepop   = generate_basepop(country_code, wpp_data),
     lfts      = generate_lfts(country_code, wpp_data, compact, final_year),
     tfr       = generate_tfr(country_code, wpp_data, final_year),
-    srb       = generate_srb(country_code, wpp_data, final_year)
-    # pasfrs    = generate_pasfrs(country_code, wpp_data, fert10_54),
+    srb       = generate_srb(country_code, wpp_data, final_year),
+    pasfr     = generate_pasfr(country_code, wpp_data, fert10_54, final_year)
     # migration = generate_migration(country_code, wpp_data)
   )
   
@@ -93,7 +92,7 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   write_upd_data_frame(upd$lfts,      upd_handle, num_cols, tag="lfts")
   write_upd_data_frame(upd$tfr,       upd_handle, num_cols, tag="tfr")
   write_upd_data_frame(upd$srb,       upd_handle, num_cols, tag="srb")
-  # write_upd_data_frame(upd$pasfrs,    upd_handle, num_cols, tag="pasfrs")
+  write_upd_data_frame(upd$pasfr,     upd_handle, num_cols, tag="pasfrs")
   # write_upd_data_frame(upd$migration, upd_handle, num_cols, tag="migration")
   close(upd_handle)
 }
@@ -272,10 +271,62 @@ generate_srb = function(country_code, wpp_data, year_final=2049) {
                             variable.name="year",
                             value.name="value")
   srb_long$year = as.numeric(as.character(srb_long$year))
-  return(srb_long[srb_long$year >= 1970 & srb_long$year <= year_final,c("year", "value")])
+  return(srb_long[srb_long$year >= 1970 & srb_long$year <= year_final, c("year", "value")])
 }
 
+generate_pasfr = function(country_code, wpp_data, fert10_54=FALSE, year_final=2049) {
+  pasfr_long = reshape2::melt(wpp_data$pasfr[wpp_data$pasfr$country_code==country_code,],
+                              id.vars=c("country_code", "country", "age"),
+                              measure.vars=sprintf("%d", 1950:2100),
+                              variable.name="year",
+                              value.name="value")
+  pasfr_long$year = as.numeric(as.character(pasfr_long$year))
+  pasfr_long = pasfr_long[pasfr_long$year >= 1970 & pasfr_long$year <= year_final,]
+  
+  ## WPP2022 and later model fertility from ages 10-54, but Spectrum only models
+  ## births to 15-49 mothers. We attribute 10-14 fertility to ages 15-19 and
+  ## 50-54 to 45-49 (Jeff Eaton email 2022-08-22)
+  process_15_49 = function(df) {
+    sum_10_14 = 0.01 * sum(df$value[df$age<15])
+    sum_50_54 = 0.01 * sum(df$value[df$age>49])
 
+    dat = df[df$age >= 15 & df$age <= 49,]
+    dat$value = 0.01 * dat$value
+
+    ## Reassign 10-14 fertility to ages 15-19
+    dat$value[dat$age==15] = dat$value[dat$age==15] + 8/15 * sum_10_14
+    dat$value[dat$age==16] = dat$value[dat$age==16] + 4/15 * sum_10_14
+    dat$value[dat$age==17] = dat$value[dat$age==17] + 2/15 * sum_10_14
+    dat$value[dat$age==18] = dat$value[dat$age==18] + 1/15 * sum_10_14
+    dat$value[dat$age==19] = dat$value[dat$age==19] + 0/15 * sum_10_14
+
+    ## Reassign 50-54 fertility to ages 50-54
+    dat$value[dat$age==49] = dat$value[dat$age==49] + 8/15 * sum_50_54
+    dat$value[dat$age==48] = dat$value[dat$age==48] + 4/15 * sum_50_54
+    dat$value[dat$age==47] = dat$value[dat$age==47] + 2/15 * sum_50_54
+    dat$value[dat$age==46] = dat$value[dat$age==46] + 1/15 * sum_50_54
+    dat$value[dat$age==45] = dat$value[dat$age==45] + 0/15 * sum_50_54
+
+    return(dat)
+  }
+
+  process_10_54 = function(df) {
+    dat = df
+    dat$value = 0.01 * df$value
+    return(dat)
+  }
+
+  if (fert10_54) {
+    process_data = process_10_54
+  } else {
+    process_data = process_15_49
+  }
+
+  pasfr_norm = plyr::ddply(pasfr_long[,c("age", "year", "value")], .variables=c("year"), process_data)
+  colnames(pasfr_norm) = c("age", "year", "value")
+
+  return(pasfr_norm[order(pasfr_norm$year, pasfr_norm$age),c("year", "age", "value")])
+}
 
 
 
