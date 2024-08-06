@@ -1,10 +1,17 @@
 #' Load WPP data needed to prepare UPD files
+#' @param revision The WPP revision to load. This must correspond to a subfolder
+#'   in the 'data' folder.
+#' @param variant The variant used for projection. Defaults to MEDIUM. This must
+#'   be specified manually based on what UN Population Division products are
+#'   shared or used.
 #' @return a named list
 #' @export
-wpp_init = function(wpp_revision="2024") {
+wpp_init = function(wpp_revision="2024", variant="MEDIUM") {
   data_path = sprintf("data/%s", wpp_revision)
   return(list(
-    # metadata  = readRDS("data/WPP2022_metadata.rds"),
+    revision   = wpp_revision,
+    variant    = variant,
+    metadata   = readRDS(sprintf("%s/metadata.rds", data_path)),
     population = readRDS(sprintf("%s/population.rds", data_path)),
     life_table = readRDS(sprintf("%s/life-table.rds", data_path)),
     tfr        = readRDS(sprintf("%s/tfr.rds", data_path)),
@@ -76,7 +83,7 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   
   ## Note that we are passing wpp_data by value, which could be expensive
   upd = list(
-    # header    = generate_header(country_code, wpp_data, compact),
+    header    = generate_header(country_code, wpp_data, compact),
     basepop   = generate_basepop(country_code, wpp_data),
     lfts      = generate_lfts(country_code, wpp_data, compact, final_year),
     tfr       = generate_tfr(country_code, wpp_data, final_year),
@@ -86,8 +93,8 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   )
   
   upd_handle = file(upd_name, open="w", encoding="UTF-8")
-  # writeChar(iconv("\ufeff", to="UTF-8"), upd_handle, eos=NULL) # write byte-order mark (BOM) to the UPD file
-  # write_upd_list(      upd$header,    upd_handle, num_cols, tag="header")
+  writeChar(iconv("\ufeff", to="UTF-8"), upd_handle, eos=NULL) # write byte-order mark (BOM) to the UPD file
+  write_upd_list(      upd$header,    upd_handle, num_cols, tag="header")
   write_upd_data_frame(upd$basepop,   upd_handle, num_cols, tag="basepop")
   write_upd_data_frame(upd$lfts,      upd_handle, num_cols, tag="lfts")
   write_upd_data_frame(upd$tfr,       upd_handle, num_cols, tag="tfr")
@@ -95,6 +102,31 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   write_upd_data_frame(upd$pasfr,     upd_handle, num_cols, tag="pasfrs")
   write_upd_data_frame(upd$migration, upd_handle, num_cols, tag="migration")
   close(upd_handle)
+}
+
+generate_header = function(country_code, wpp_data, compact=TRUE) {
+  ## The UPD file format may vary based on the version number. The version
+  ## number is the same as the WPP revision year (e.g., version=2024 for WPP
+  ## 2024). Version 2012 (and earlier?) included a life table with 9 indicators.
+  ## Versions 2015 and later included a life table with just 3 indicators: ex,
+  ## lx, and Sx.
+  if (compact) {
+    version = wpp_data$revision
+  } else {
+    version = 2012
+  }
+
+  country_name = wpp_data$metadata$country[wpp_data$metadata$country_code==country_code]
+  software = basename(rstudioapi::getActiveProject())
+
+  rval = list(c("UPD Version", version),
+              sprintf("Country=%s", country_name),
+              sprintf("Software=%s", software),
+              sprintf("RevisionYear=%s", wpp_data$revision),
+              sprintf("Variant=%s", wpp_data$variant),
+              sprintf("Date=%s", Sys.Date()))
+
+  return(rval)
 }
 
 generate_basepop = function(country_code, wpp_data) {
@@ -134,6 +166,21 @@ write_upd_data_frame = function(df, upd_handle, num_cols, tag) {
   for (k in 1:nrow(df)) {
     outstr = sprintf("%s%s\n", paste(df[k,], collapse=","), pad)
     cat(gsub(",NA,", ",,", outstr), file=upd_handle, append=TRUE) # Some lx values in compact life tables are NA. gsub replaces these with blank cells.
+  }
+  cat(sprintf("</%s>%s\n", tag, stringi::stri_dup(",", num_cols - 1)), file=upd_handle, append=TRUE)
+}
+
+#' Write out a portion of the UPD file that is stored as a free-form list
+#' @param data_list the data to write out
+#' @param upd_handle an open file handle to the UPD file
+#' @param num_cols the number of columns in the UPD file
+#' @param tag specifies the tags that delimit the block (e.g., \code{<basepop>...</basepop>})
+write_upd_list = function(data_list, upd_handle, num_cols, tag) {
+  cat(sprintf("<%s>%s\n", tag, stringi::stri_dup(",", num_cols - 1)), file=upd_handle, append=TRUE)
+  for (k in 1:length(data_list)) {
+    out = paste(data_list[[k]], collapse=",")
+    pad = stringi::stri_dup(",", num_cols - length(data_list[[k]]))
+    cat(sprintf("%s%s\n", out, pad), file=upd_handle, append=TRUE)
   }
   cat(sprintf("</%s>%s\n", tag, stringi::stri_dup(",", num_cols - 1)), file=upd_handle, append=TRUE)
 }

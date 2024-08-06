@@ -12,6 +12,15 @@ read_indicator_by_year = function(filename) {
   read.table(filename, sep="\t", header=TRUE, check.names=FALSE, quote="\"", colClasses=col_type)
 }
 
+prepare_metadata = function(wpp_revision, rds_name) {
+  cat(sprintf("- preparing metadata..."))
+  data_path = sprintf("data/%s", wpp_revision)
+  wpp_data = read_indicator_by_year(sprintf("%s/tfr.txt", data_path))
+  wpp_meta = unique(wpp_data[,c("country_code", "country")])
+  saveRDS(wpp_meta, sprintf("%s/%s", data_path, rds_name))
+  cat(sprintf("done\n"))
+}
+
 prepare_population = function(wpp_revision, rds_name) {
   cat(sprintf("- preparing population data..."))
   data_path = sprintf("data/%s", wpp_revision)
@@ -106,7 +115,7 @@ prepare_net_migration = function(wpp_revision, rds_name) {
 
 prepare_rds = function(wpp_revision="2024") {
   cat(sprintf("processing revision %s\n", wpp_revision))
-  # prepare_metadata("data/WPP2022_metadata.rds")
+  prepare_metadata(wpp_revision, "metadata.rds")
   prepare_population(wpp_revision, "population.rds")
   prepare_life_table(wpp_revision, "life-table.rds")
   prepare_tfr(wpp_revision, "tfr.rds")
