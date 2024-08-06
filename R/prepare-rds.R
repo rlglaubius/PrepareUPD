@@ -1,19 +1,22 @@
-
-read_pop = function(popfile) {
+## Helper function used to read text files provided by UN Population Division
+## for indicators that are stratified by age and year.
+read_indicator_by_age_year = function(filename) {
   col_type = c("integer", "factor", "integer", rep("numeric", 2100 - 1950 + 1))
-  read.table(popfile, sep="\t", header=TRUE, check.names=FALSE, quote="\"", colClasses=col_type)
+  read.table(filename, sep="\t", header=TRUE, check.names=FALSE, quote="\"", colClasses=col_type)
 }
 
-read_e0 = function(e0file) {
+## Helper function used to read text files provided by UN Population Division
+## for indicators that are stratified by year.
+read_indicator_by_year = function(filename) {
   col_type = c("integer", "factor", rep("numeric", 2100 - 1950 + 1))
-  read.table(e0file, sep="\t", header=TRUE, check.names=FALSE, quote="\"", colClasses=col_type)
+  read.table(filename, sep="\t", header=TRUE, check.names=FALSE, quote="\"", colClasses=col_type)
 }
 
 prepare_population = function(wpp_revision, rds_name) {
   cat(sprintf("- preparing population data..."))
   data_path = sprintf("data/%s", wpp_revision)
-  pop_list = list(Male   = read_pop(sprintf("%s/popM.txt", data_path)),
-                  Female = read_pop(sprintf("%s/popF.txt", data_path)))
+  pop_list = list(Male   = read_indicator_by_age_year(sprintf("%s/popM.txt", data_path)),
+                  Female = read_indicator_by_age_year(sprintf("%s/popF.txt", data_path)))
   pop_data = dplyr::bind_rows(pop_list, .id="sex") 
   pop_data$sex = factor(pop_data$sex, levels=c("Male", "Female")) # Force ordering of levels so that Male=1, Female=2 as Spectrum expects
   saveRDS(pop_data, sprintf("%s/%s", data_path, rds_name))
@@ -52,10 +55,10 @@ prepare_life_table = function(wpp_revision, rds_name) {
     error("No source for lx")
   }
   
-  e0_wide = dplyr::bind_rows(list(Male   = read_e0(sprintf("%s/e0M.txt", data_path)),
-                                  Female = read_e0(sprintf("%s/e0F.txt", data_path))), .id="sex")
-  mx_wide = dplyr::bind_rows(list(Male   = read_pop(sprintf("%s/mxM.txt", data_path)),
-                                  Female = read_pop(sprintf("%s/mxF.txt", data_path))), .id="sex")
+  e0_wide = dplyr::bind_rows(list(Male   = read_indicator_by_year(sprintf("%s/e0M.txt", data_path)),
+                                  Female = read_indicator_by_year(sprintf("%s/e0F.txt", data_path))), .id="sex")
+  mx_wide = dplyr::bind_rows(list(Male   = read_indicator_by_age_year(sprintf("%s/mxM.txt", data_path)),
+                                  Female = read_indicator_by_age_year(sprintf("%s/mxF.txt", data_path))), .id="sex")
   
   lx_wide$sex = factor(lx_wide$sex, levels=c("Male", "Female"))
   e0_wide$sex = factor(e0_wide$sex, levels=c("Male", "Female"))
@@ -66,12 +69,29 @@ prepare_life_table = function(wpp_revision, rds_name) {
   cat(sprintf("done\n"))
 }
 
+prepare_tfr = function(wpp_revision, rds_name) {
+  cat(sprintf("- preparing total fertility rate data..."))
+  data_path = sprintf("data/%s", wpp_revision)
+  tfr_data = read_indicator_by_year(sprintf("%s/tfr.txt", data_path))
+  saveRDS(tfr_data, sprintf("%s/%s", data_path, rds_name))
+  cat(sprintf("done\n"))
+}
+
+prepare_srb = function(wpp_revision, rds_name) {
+  cat(sprintf("- preparing sex ratio at birth data..."))
+  data_path = sprintf("data/%s", wpp_revision)
+  srb_data = read_indicator_by_year(sprintf("%s/sexRatio.txt", data_path))
+  saveRDS(srb_data, sprintf("%s/%s", data_path, rds_name))
+  cat(sprintf("done\n"))
+}
+
 prepare_rds = function(wpp_revision="2024") {
   cat(sprintf("processing revision %s\n", wpp_revision))
   # prepare_metadata("data/WPP2022_metadata.rds")
   prepare_population(wpp_revision, "population.rds")
   prepare_life_table(wpp_revision, "life-table.rds")
-  # prepare_indicators("data/WPP2022_Demographic_Indicators_Medium.rds")
+  prepare_tfr(wpp_revision, "tfr.rds")
+  prepare_srb(wpp_revision, "srb.rds")
   # prepare_fertility_by_age("data/WPP2022_Fertility_by_Age1.rds")
   # prepare_net_migration("data/migration.rds")
 }

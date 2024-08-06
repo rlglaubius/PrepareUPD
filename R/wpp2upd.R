@@ -5,8 +5,10 @@ wpp_init = function(wpp_revision="2024") {
   data_path = sprintf("data/%s", wpp_revision)
   return(list(
     # metadata  = readRDS("data/WPP2022_metadata.rds"),
-    population  = readRDS(sprintf("%s/population.rds", data_path)),
-    life_table  = readRDS(sprintf("%s/life-table.rds", data_path))
+    population = readRDS(sprintf("%s/population.rds", data_path)),
+    life_table = readRDS(sprintf("%s/life-table.rds", data_path)),
+    tfr        = readRDS(sprintf("%s/tfr.rds", data_path)),
+    srb        = readRDS(sprintf("%s/srb.rds", data_path))
     # ind_data  = readRDS("data/WPP2022_Demographic_Indicators_Medium.rds"),
     # asfr_data = readRDS("data/WPP2022_Fertility_by_Age1.rds"),
     # migr_data = readRDS("data/migration.rds")
@@ -25,6 +27,8 @@ wpp_init = function(wpp_revision="2024") {
 #' @param fert10_54 Indicates whether age-specific fertilty should be output for
 #'   ages 10-54 (\code{fert10_54=TRUE) or 15-49 (\code{fert10_54=FALSE}). See
 #'   Details.
+#' @param final_year Data in UPD files will run from 1970 to final_year. Cannot
+#'   be later than 2100.
 #' @section Details:
 #'
 #'   UPD files include a life table for each one-year period between 1970 and
@@ -60,7 +64,7 @@ wpp_init = function(wpp_revision="2024") {
 #'   Note that UPD files generated with \code{fert10_54=TRUE} cannot be used in Spectrum.
 #'
 #' @export
-wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_54=FALSE) {
+wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_54=FALSE, final_year=2049) {
   if (is.null(wpp_data)) {
     wpp_data = wpp_init()
   }
@@ -75,9 +79,9 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   upd = list(
     # header    = generate_header(country_code, wpp_data, compact),
     basepop   = generate_basepop(country_code, wpp_data),
-    lfts      = generate_lfts(country_code, wpp_data, compact)
-    # tfr       = generate_tfr(country_code, wpp_data),
-    # srb       = generate_srb(country_code, wpp_data),
+    lfts      = generate_lfts(country_code, wpp_data, compact, final_year),
+    tfr       = generate_tfr(country_code, wpp_data, final_year),
+    srb       = generate_srb(country_code, wpp_data, final_year)
     # pasfrs    = generate_pasfrs(country_code, wpp_data, fert10_54),
     # migration = generate_migration(country_code, wpp_data)
   )
@@ -87,8 +91,8 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   # write_upd_list(      upd$header,    upd_handle, num_cols, tag="header")
   write_upd_data_frame(upd$basepop,   upd_handle, num_cols, tag="basepop")
   write_upd_data_frame(upd$lfts,      upd_handle, num_cols, tag="lfts")
-  # write_upd_data_frame(upd$tfr,       upd_handle, num_cols, tag="tfr")
-  # write_upd_data_frame(upd$srb,       upd_handle, num_cols, tag="srb")
+  write_upd_data_frame(upd$tfr,       upd_handle, num_cols, tag="tfr")
+  write_upd_data_frame(upd$srb,       upd_handle, num_cols, tag="srb")
   # write_upd_data_frame(upd$pasfrs,    upd_handle, num_cols, tag="pasfrs")
   # write_upd_data_frame(upd$migration, upd_handle, num_cols, tag="migration")
   close(upd_handle)
@@ -250,3 +254,28 @@ generate_lfts = function(country_code, wpp_data, compact=TRUE, year_final=2049) 
   
   return(lfts_flat[order(lfts_flat$year, lfts_flat$sex, lfts_flat$age),keep])
 }
+
+generate_tfr = function(country_code, wpp_data, year_final=2049) {
+  tfr_long = reshape2::melt(wpp_data$tfr[wpp_data$tfr$country_code==country_code,],
+                            id.vars=c("country_code", "country"),
+                            measure.vars=sprintf("%d", 1950:2100),
+                            variable.name="year",
+                            value.name="value")
+  tfr_long$year = as.numeric(as.character(tfr_long$year))
+  return(tfr_long[tfr_long$year >= 1970 & tfr_long$year <= year_final,c("year", "value")])
+}
+
+generate_srb = function(country_code, wpp_data, year_final=2049) {
+  srb_long = reshape2::melt(wpp_data$srb[wpp_data$srb$country_code==country_code,],
+                            id.vars=c("country_code", "country"),
+                            measure.vars=sprintf("%d", 1950:2100),
+                            variable.name="year",
+                            value.name="value")
+  srb_long$year = as.numeric(as.character(srb_long$year))
+  return(srb_long[srb_long$year >= 1970 & srb_long$year <= year_final,c("year", "value")])
+}
+
+
+
+
+
