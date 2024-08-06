@@ -93,6 +93,17 @@ prepare_fertility_by_age = function(wpp_revision, rds_name) {
   cat(sprintf("done\n"))
 }
 
+prepare_net_migration = function(wpp_revision, rds_name) {
+  cat(sprintf("- preparing net migration data..."))
+  data_path = sprintf("data/%s", wpp_revision)
+  migr_list = list(Male   = read_indicator_by_age_year(sprintf("%s/migrationM.txt", data_path)),
+                   Female = read_indicator_by_age_year(sprintf("%s/migrationF.txt", data_path)))
+  migr_data = dplyr::bind_rows(migr_list, .id="sex") 
+  migr_data$sex = factor(migr_data$sex, levels=c("Male", "Female")) # Force ordering of levels so that Male=1, Female=2 as Spectrum expects
+  saveRDS(migr_data, sprintf("%s/%s", data_path, rds_name))
+  cat(sprintf("done\n"))
+}
+
 prepare_rds = function(wpp_revision="2024") {
   cat(sprintf("processing revision %s\n", wpp_revision))
   # prepare_metadata("data/WPP2022_metadata.rds")
@@ -101,7 +112,7 @@ prepare_rds = function(wpp_revision="2024") {
   prepare_tfr(wpp_revision, "tfr.rds")
   prepare_srb(wpp_revision, "srb.rds")
   prepare_fertility_by_age(wpp_revision, "pasfr.rds")
-  # prepare_net_migration("data/migration.rds")
+  prepare_net_migration(wpp_revision, "migration.rds")
 }
 
 

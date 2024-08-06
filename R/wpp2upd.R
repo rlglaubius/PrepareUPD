@@ -9,8 +9,8 @@ wpp_init = function(wpp_revision="2024") {
     life_table = readRDS(sprintf("%s/life-table.rds", data_path)),
     tfr        = readRDS(sprintf("%s/tfr.rds", data_path)),
     srb        = readRDS(sprintf("%s/srb.rds", data_path)),
-    pasfr_data = readRDS(sprintf("%s/pasfr.rds", data_path))
-    # migr_data = readRDS("data/migration.rds")
+    pasfr      = readRDS(sprintf("%s/pasfr.rds", data_path)),
+    migration  = readRDS(sprintf("%s/migration.rds", data_path))
   ))
 }
 
@@ -81,8 +81,8 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
     lfts      = generate_lfts(country_code, wpp_data, compact, final_year),
     tfr       = generate_tfr(country_code, wpp_data, final_year),
     srb       = generate_srb(country_code, wpp_data, final_year),
-    pasfr     = generate_pasfr(country_code, wpp_data, fert10_54, final_year)
-    # migration = generate_migration(country_code, wpp_data)
+    pasfr     = generate_pasfr(country_code, wpp_data, fert10_54, final_year),
+    migration = generate_migration(country_code, wpp_data, final_year)
   )
   
   upd_handle = file(upd_name, open="w", encoding="UTF-8")
@@ -93,7 +93,7 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
   write_upd_data_frame(upd$tfr,       upd_handle, num_cols, tag="tfr")
   write_upd_data_frame(upd$srb,       upd_handle, num_cols, tag="srb")
   write_upd_data_frame(upd$pasfr,     upd_handle, num_cols, tag="pasfrs")
-  # write_upd_data_frame(upd$migration, upd_handle, num_cols, tag="migration")
+  write_upd_data_frame(upd$migration, upd_handle, num_cols, tag="migration")
   close(upd_handle)
 }
 
@@ -328,5 +328,17 @@ generate_pasfr = function(country_code, wpp_data, fert10_54=FALSE, year_final=20
   return(pasfr_norm[order(pasfr_norm$year, pasfr_norm$age),c("year", "age", "value")])
 }
 
-
+generate_migration = function(country_code, wpp_data, year_final=2049) {
+  migr_long = reshape2::melt(wpp_data$migration[wpp_data$migration$country_code==country_code,],
+                             id.vars = c("country_code", "country", "sex", "age"),
+                             measure.vars = sprintf("%d", 1950:2100),
+                             variable.name = "year",
+                             value.name = "value")
+  migr_long$year = as.numeric(as.character(migr_long$year))
+  migr_long$age[migr_long$age > 80] = 80
+  migr_aggr = data.table::as.data.table(migr_long)[,.(value=sum(value)),by=.(year,sex,age)]
+  migr_aggr$sex   = as.integer(migr_aggr$sex) # convert from factor to integers
+  migr_aggr$value = 1000 * migr_aggr$value    # convert from 1000s to numbers
+  return(migr_aggr)  
+}
 
