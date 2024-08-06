@@ -92,7 +92,7 @@ wpp2upd = function(country_code, upd_name, wpp_data=NULL, compact=TRUE, fert10_5
     migration = generate_migration(country_code, wpp_data, final_year)
   )
   
-  upd_handle = file(upd_name, open="w", encoding="UTF-8")
+  upd_handle = file(upd_name, open="wb", encoding="UTF-8")
   writeChar(iconv("\ufeff", to="UTF-8"), upd_handle, eos=NULL) # write byte-order mark (BOM) to the UPD file
   write_upd_list(      upd$header,    upd_handle, num_cols, tag="header")
   write_upd_data_frame(upd$basepop,   upd_handle, num_cols, tag="basepop")
@@ -318,6 +318,7 @@ generate_srb = function(country_code, wpp_data, year_final=2049) {
                             variable.name="year",
                             value.name="value")
   srb_long$year = as.numeric(as.character(srb_long$year))
+  srb_long$value = 100 * srb_long$value # convert to male births per 100 female births
   return(srb_long[srb_long$year >= 1970 & srb_long$year <= year_final, c("year", "value")])
 }
 
@@ -386,6 +387,5 @@ generate_migration = function(country_code, wpp_data, year_final=2049) {
   migr_aggr = data.table::as.data.table(migr_long)[,.(value=sum(value)),by=.(year,sex,age)]
   migr_aggr$sex   = as.integer(migr_aggr$sex) # convert from factor to integers
   migr_aggr$value = 1000 * migr_aggr$value    # convert from 1000s to numbers
-  return(migr_aggr)  
+  return(migr_aggr[migr_aggr$year >= 1970 & migr_aggr$year <= year_final,])  
 }
-
