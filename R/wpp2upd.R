@@ -258,7 +258,7 @@ generate_lfts = function(country_code, wpp_data, compact=TRUE, year_final=2049) 
   lx_comp = dplyr::left_join(lx_src_long, lt_wide, by=c("year", "sex", "age"))
   lx_comp$difference = abs(lx_comp$value - lx_comp$lx)
   if (any(lx_comp$difference > 0.1)) {
-    warning("Calculated number of survivors differs from UNPD estimate by more than %f people", tol)
+    warning(sprintf("Calculated number of survivors differs from UNPD estimate by more than %f people (isocode=%d)", tol, country_code))
   }
   ## END verification check
   

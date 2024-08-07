@@ -84,7 +84,7 @@ genupd = function(country_code, spec_locations, wpp_data = NULL, tag="24") {
     
     wpp_pop = reshape2::melt(wpp_data$population[wpp_data$population$country_code==country_code,],
                              id.vars = c("country_code", "country", "sex", "age"),
-                             measure.vars = sprintf("%d", 1971:2050),
+                             measure.vars = sprintf("%d", 1971:2100),
                              variable.name="year",
                              value.name="value")
     colnames(wpp_pop) = c("country_code", "country", "Sex", "Age", "Year", "Value")
