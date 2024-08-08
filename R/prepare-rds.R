@@ -66,8 +66,8 @@ prepare_life_table = function(wpp_revision, rds_name) {
   
   e0_wide = dplyr::bind_rows(list(Male   = read_indicator_by_year(sprintf("%s/e0M.txt", data_path)),
                                   Female = read_indicator_by_year(sprintf("%s/e0F.txt", data_path))), .id="sex")
-  mx_wide = dplyr::bind_rows(list(Male   = read_indicator_by_age_year(sprintf("%s/mxM.txt", data_path)),
-                                  Female = read_indicator_by_age_year(sprintf("%s/mxF.txt", data_path))), .id="sex")
+  mx_wide = dplyr::bind_rows(list(Male   = read_indicator_by_age_year(sprintf("%s/mxM_alt.txt", data_path)),
+                                  Female = read_indicator_by_age_year(sprintf("%s/mxF_alt.txt", data_path))), .id="sex")
   
   lx_wide$sex = factor(lx_wide$sex, levels=c("Male", "Female"))
   e0_wide$sex = factor(e0_wide$sex, levels=c("Male", "Female"))
