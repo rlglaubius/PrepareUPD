@@ -32,51 +32,74 @@ prepare_population = function(wpp_revision, rds_name) {
   cat(sprintf("done\n"))
 }
 
+## For WPP 2024 we initially used a limited set of indicators (mx, e0, and l1)
+## to calculate life tables. Once UNPD published the complete life tables for
+## WPP 2024 we found some edge cases where our reconstruction did not match.
+## These appear to be cases where mortality crises resulted in few survivors to
+## old ages, which caused some numerical issues in our reconstructions. While we
+## did work out some potential solutions for these issues [Rob Glaubius
+## 2024-08-29 weekly report], at this point it was less error-prone to just use
+## the WPP 2024 life tables as input directly instead.
 prepare_life_table = function(wpp_revision, rds_name) {
   cat(sprintf("- preparing life table data..."))
   data_path = sprintf("data/%s", wpp_revision)
   
-  col_type = c("numeric", "text", "text",    "text", "text",
-               "text",    "text", "numeric", "text",	"numeric",
-               "numeric", "text",	"text",	   "numeric",
-               rep("numeric", 22))
-  
-  if (wpp_revision == "2024") {
-    ## lx was provided in abridged format in Excel for WPP 2024. Since we have mx
-    ## and e0, we really just need l1 to work out the whole life table, but we
-    ## retain the remaining lx values to verify our calculations.
-    lx_list = list(
-      m_est = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Male.xlsx",   sheet="Estimates", col_types=col_type),
-      m_med = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Male.xlsx",   sheet="Medium",    col_types=col_type),
-      f_est = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Female.xlsx", sheet="Estimates", col_types=col_type),
-      f_med = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Female.xlsx", sheet="Medium",    col_types=col_type))
-    
-    ## Reformat lx for consistency with e0 and mx
-    lx_long = reshape2::melt(dplyr::bind_rows(lx_list),
-                             id.vars=c("LocationID", "LocationName", "Sex", "Year"),
-                             measure.vars=c("0", "1", seq(5, 95, 5), "100+"),
-                             variable.name="age",
-                             value.name="value")
-    lx_long$age = as.numeric(gsub("100\\+", "100", as.character(lx_long$age)))
-    lx_wide = reshape2::dcast(dplyr::rename(lx_long, country_code=LocationID, country=LocationName, sex=Sex, year=Year),
-                              country_code+country+age+sex~year)
-  } else {
-    error("No source for lx")
-  }
-  
-  e0_wide = dplyr::bind_rows(list(Male   = read_indicator_by_year(sprintf("%s/e0M.txt", data_path)),
-                                  Female = read_indicator_by_year(sprintf("%s/e0F.txt", data_path))), .id="sex")
-  mx_wide = dplyr::bind_rows(list(Male   = read_indicator_by_age_year(sprintf("%s/mxM_alt.txt", data_path)),
-                                  Female = read_indicator_by_age_year(sprintf("%s/mxF_alt.txt", data_path))), .id="sex")
-  
-  lx_wide$sex = factor(lx_wide$sex, levels=c("Male", "Female"))
-  e0_wide$sex = factor(e0_wide$sex, levels=c("Male", "Female"))
-  mx_wide$sex = factor(mx_wide$sex, levels=c("Male", "Female"))
-  
-  ltab_data = list(mx = mx_wide, e0 = e0_wide, lx = lx_wide)
-  saveRDS(ltab_data, sprintf("%s/%s", data_path, rds_name))
+  lfts_list = list(
+    m_est = read.csv("data/2024/WPP2024_Life_Table_Complete_Medium_Male_1950-2023.csv"),
+    m_med = read.csv("data/2024/WPP2024_Life_Table_Complete_Medium_Male_2024-2100.csv"),
+    f_est = read.csv("data/2024/WPP2024_Life_Table_Complete_Medium_Female_1950-2023.csv"),
+    f_med = read.csv("data/2024/WPP2024_Life_Table_Complete_Medium_Female_2024-2100.csv")
+  )
+  lfts_flat = dplyr::bind_rows(lfts_list)
+  saveRDS(lfts_flat, sprintf("%s/%s", data_path, rds_name))
   cat(sprintf("done\n"))
 }
+
+# prepare_life_table = function(wpp_revision, rds_name) {
+#   cat(sprintf("- preparing life table data..."))
+#   data_path = sprintf("data/%s", wpp_revision)
+#   
+#   col_type = c("numeric", "text", "text",    "text", "text",
+#                "text",    "text", "numeric", "text",	"numeric",
+#                "numeric", "text",	"text",	   "numeric",
+#                rep("numeric", 22))
+#   
+#   if (wpp_revision == "2024") {
+#     ## lx was provided in abridged format in Excel for WPP 2024. Since we have mx
+#     ## and e0, we really just need l1 to work out the whole life table, but we
+#     ## retain the remaining lx values to verify our calculations.
+#     lx_list = list(
+#       m_est = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Male.xlsx",   sheet="Estimates", col_types=col_type),
+#       m_med = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Male.xlsx",   sheet="Medium",    col_types=col_type),
+#       f_est = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Female.xlsx", sheet="Estimates", col_types=col_type),
+#       f_med = readxl::read_excel("data/2024/WPP2024_Survivors_to_exact_age_(lx)_per_100,000_live_births_Abridged_Ages_Female.xlsx", sheet="Medium",    col_types=col_type))
+#     
+#     ## Reformat lx for consistency with e0 and mx
+#     lx_long = reshape2::melt(dplyr::bind_rows(lx_list),
+#                              id.vars=c("LocationID", "LocationName", "Sex", "Year"),
+#                              measure.vars=c("0", "1", seq(5, 95, 5), "100+"),
+#                              variable.name="age",
+#                              value.name="value")
+#     lx_long$age = as.numeric(gsub("100\\+", "100", as.character(lx_long$age)))
+#     lx_wide = reshape2::dcast(dplyr::rename(lx_long, country_code=LocationID, country=LocationName, sex=Sex, year=Year),
+#                               country_code+country+age+sex~year)
+#   } else {
+#     error("No source for lx")
+#   }
+#   
+#   e0_wide = dplyr::bind_rows(list(Male   = read_indicator_by_year(sprintf("%s/e0M.txt", data_path)),
+#                                   Female = read_indicator_by_year(sprintf("%s/e0F.txt", data_path))), .id="sex")
+#   mx_wide = dplyr::bind_rows(list(Male   = read_indicator_by_age_year(sprintf("%s/mxM_alt.txt", data_path)),
+#                                   Female = read_indicator_by_age_year(sprintf("%s/mxF_alt.txt", data_path))), .id="sex")
+#   
+#   lx_wide$sex = factor(lx_wide$sex, levels=c("Male", "Female"))
+#   e0_wide$sex = factor(e0_wide$sex, levels=c("Male", "Female"))
+#   mx_wide$sex = factor(mx_wide$sex, levels=c("Male", "Female"))
+#   
+#   ltab_data = list(mx = mx_wide, e0 = e0_wide, lx = lx_wide)
+#   saveRDS(ltab_data, sprintf("%s/%s", data_path, rds_name))
+#   cat(sprintf("done\n"))
+# }
 
 prepare_tfr = function(wpp_revision, rds_name) {
   cat(sprintf("- preparing total fertility rate data..."))

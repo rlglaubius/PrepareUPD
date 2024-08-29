@@ -186,81 +186,93 @@ write_upd_list = function(data_list, upd_handle, num_cols, tag) {
 }
 
 generate_lfts = function(country_code, wpp_data, compact=TRUE, year_final=2049) {
-  n_sex = 2
-  n_age = 101
-  n_yrs = 2100 - 1950 + 1
-  
-  dim = c(n_age, n_sex, n_yrs)
-  dimnames = list(age=0:100, sex=c("Male", "Female"), year=1950:2100)
-  
   lt_fn = c("mx", "ax", "qx", "lx", "dx", "Lx", "Tx", "ex", "Sx")
-  lt = lapply(1:length(lt_fn), function(k) {array(NA, dim=dim, dimnames=dimnames)})
-  names(lt) = lt_fn
+  cols = c("LocID", "Time", "Sex", "AgeGrpStart", lt_fn)
+  lt_wide = wpp_data$life_table[wpp_data$life_table$LocID==country_code, cols]
+  lt_wide = dplyr::rename(lt_wide, "year"=Time, "sex"=Sex, "age"=AgeGrpStart,)
+  lt_wide = dplyr::mutate(lt_wide, sex = factor(sex, levels=c("Male", "Female"), labels=1:2))
+  lt_wide = lt_wide[order(lt_wide$year, lt_wide$sex, lt_wide$age),]
+  lt_wide$LocID = NULL
   
-  ## We reconstruct the life table for ages 0, 1, ..., 99, 100+ from mx, e0, and l1
-  mx_df = wpp_data$life_table$mx[wpp_data$life_table$mx$country_code == country_code,]
-  e0_df = wpp_data$life_table$e0[wpp_data$life_table$e0$country_code == country_code,]
-  l1_df = wpp_data$life_table$lx[wpp_data$life_table$lx$country_code == country_code & wpp_data$life_table$lx$age == 1,]
-  
-  mx_df = mx_df[order(mx_df$sex, mx_df$age),]
-  e0_df = e0_df[order(e0_df$sex),]
-  l1_df = l1_df[order(l1_df$sex),]
-  
-  lt$mx = array(data.matrix(mx_df[,5:ncol(mx_df)]), dim=dim, dimnames=dimnames)
-  lt$ex[1,,] = data.matrix(e0_df[,4:ncol(e0_df)])
-  lt$lx[1,,] = 1e5
-  lt$lx[2,,] = data.matrix(l1_df[,5:ncol(l1_df)])
-  lt$ax[1,,] = 1.0 - (lt$lx[1,,] * lt$mx[1,,] + lt$lx[2,,] - lt$lx[1,,]) / (lt$mx[1,,] * (lt$lx[1,,] - lt$lx[2,,]))
-  lt$ax[2:100,,] = 0.5
-  lt$qx[1    ,,] = 1.0 - lt$lx[2,,] / lt$lx[1,,]
-  lt$qx[2:100,,] = lt$mx[2:100,,] / (1.0 + (1.0 - lt$ax[2:100,,]) * lt$mx[2:100,,])
-  lt$qx[101  ,,] = 1.0
-  
-  for (r in 3:101) {
-    lt$lx[r,,] = (1.0 - lt$qx[r-1,,]) * lt$lx[r-1,,]
-  }
-  
-  lt$dx[1:100,,] = lt$lx[1:100,,] - lt$lx[2:101,,]
-  lt$dx[101  ,,] = lt$lx[101,,]
-  lt$Lx[1:100,,] = lt$lx[2:101,,] + lt$dx[1:100,,] * lt$ax[1:100,,]
-  lt$Tx[1  ,,] = lt$ex[1,,] * lt$lx[1,,]
-  lt$Lx[101,,] = lt$Tx[1,,] - colSums(lt$Lx[1:100,,], dims=1)
-  lt$ax[101,,] = lt$Lx[101,,]
-  lt$Tx[101,,] = lt$Lx[101,,]
-  
-  for (r in 100:2) {
-    lt$Tx[r,,] = lt$Lx[r,,] + lt$Tx[r+1,,]
-  }
-  
-  lt$ex[2:101,,] = lt$Tx[2:101,,] / lt$lx[2:101,,]
-  lt$Sx[1    ,,] = lt$Lx[1,,] / lt$lx[1,,]
-  lt$Sx[2:100,,] = lt$Lx[2:100,,] / lt$Lx[1:99,,]
-  
-  lt_list = lapply(lt, function(ind) {as.data.frame.table(ind, responseName="value")})
-  lt_long = dplyr::bind_rows(lt_list, .id="fn")
-  lt_long$fn = factor(lt_long$fn, levels=lt_fn)
-  lt_wide = dplyr::mutate(reshape2::dcast(lt_long, year+sex+age~fn),
-                          year = as.numeric(as.character(year)),
-                          age  = as.numeric(as.character(age)))
-  
-  ## BGN verification check
-  tol = 0.1
-  lx_src_wide = wpp_data$life_table$lx[wpp_data$life_table$lx$country_code == country_code,]
-  lx_src_long = reshape2::melt(lx_src_wide,
-                               id.vars=c("sex", "age"),
-                               measure.vars=sprintf("%d", 1950:2100),
-                               variable.name="year",
-                               value.name="value")
-  lx_src_long = dplyr::mutate(lx_src_long,
-                              year = as.numeric(as.character(year)),
-                              age  = as.numeric(as.character(age)))
-  
-  lx_comp = dplyr::left_join(lx_src_long, lt_wide, by=c("year", "sex", "age"))
-  lx_comp$difference = abs(lx_comp$value - lx_comp$lx)
-  if (any(lx_comp$difference > 0.1)) {
-    warning(sprintf("Calculated number of survivors differs from UNPD estimate by more than %f people (isocode=%d)", tol, country_code))
-  }
-  ## END verification check
+  # ## The code below was intended to recover complete life tables based on mx, e0 and l1
+  # ## This was used to prepare preliminary UPD files for WPP 2024, but ultimately replaced
+  # ## with UPD files build directly by truncating complete life tables published by UNPD.
+  #
+  # n_sex = 2
+  # n_age = 101
+  # n_yrs = 2100 - 1950 + 1
+  # 
+  # dim = c(n_age, n_sex, n_yrs)
+  # dimnames = list(age=0:100, sex=c("Male", "Female"), year=1950:2100)
+  # 
+  # lt_fn = c("mx", "ax", "qx", "lx", "dx", "Lx", "Tx", "ex", "Sx")
+  # lt = lapply(1:length(lt_fn), function(k) {array(NA, dim=dim, dimnames=dimnames)})
+  # names(lt) = lt_fn
+  # 
+  # ## We reconstruct the life table for ages 0, 1, ..., 99, 100+ from mx, e0, and l1
+  # mx_df = wpp_data$life_table$mx[wpp_data$life_table$mx$country_code == country_code,]
+  # e0_df = wpp_data$life_table$e0[wpp_data$life_table$e0$country_code == country_code,]
+  # l1_df = wpp_data$life_table$lx[wpp_data$life_table$lx$country_code == country_code & wpp_data$life_table$lx$age == 1,]
+  # 
+  # mx_df = mx_df[order(mx_df$sex, mx_df$age),]
+  # e0_df = e0_df[order(e0_df$sex),]
+  # l1_df = l1_df[order(l1_df$sex),]
+  # 
+  # lt$mx = array(data.matrix(mx_df[,5:ncol(mx_df)]), dim=dim, dimnames=dimnames)
+  # lt$ex[1,,] = data.matrix(e0_df[,4:ncol(e0_df)])
+  # lt$lx[1,,] = 1e5
+  # lt$lx[2,,] = data.matrix(l1_df[,5:ncol(l1_df)])
+  # lt$ax[1,,] = 1.0 - (lt$lx[1,,] * lt$mx[1,,] + lt$lx[2,,] - lt$lx[1,,]) / (lt$mx[1,,] * (lt$lx[1,,] - lt$lx[2,,]))
+  # lt$ax[2:100,,] = 0.5
+  # lt$qx[1    ,,] = 1.0 - lt$lx[2,,] / lt$lx[1,,]
+  # lt$qx[2:100,,] = lt$mx[2:100,,] / (1.0 + (1.0 - lt$ax[2:100,,]) * lt$mx[2:100,,])
+  # lt$qx[101  ,,] = 1.0
+  # 
+  # for (r in 3:101) {
+  #   lt$lx[r,,] = (1.0 - lt$qx[r-1,,]) * lt$lx[r-1,,]
+  # }
+  # 
+  # lt$dx[1:100,,] = lt$lx[1:100,,] - lt$lx[2:101,,]
+  # lt$dx[101  ,,] = lt$lx[101,,]
+  # lt$Lx[1:100,,] = lt$lx[2:101,,] + lt$dx[1:100,,] * lt$ax[1:100,,]
+  # lt$Tx[1  ,,] = lt$ex[1,,] * lt$lx[1,,]
+  # lt$Lx[101,,] = max(lt$Tx[1,,] - colSums(lt$Lx[1:100,,], dims=1), 0) # This may come out negative due to accumulated rounding error in Lx if too few people survive to age 100)
+  # lt$ax[101,,] = lt$Lx[101,,]
+  # lt$Tx[101,,] = lt$Lx[101,,]
+  # 
+  # for (r in 100:2) {
+  #   lt$Tx[r,,] = lt$Lx[r,,] + lt$Tx[r+1,,]
+  # }
+  # 
+  # lt$ex[2:101,,] = lt$Tx[2:101,,] / lt$lx[2:101,,]
+  # lt$Sx[1    ,,] = lt$Lx[1,,] / lt$lx[1,,]
+  # lt$Sx[2:100,,] = lt$Lx[2:100,,] / lt$Lx[1:99,,]
+  # 
+  # lt_list = lapply(lt, function(ind) {as.data.frame.table(ind, responseName="value")})
+  # lt_long = dplyr::bind_rows(lt_list, .id="fn")
+  # lt_long$fn = factor(lt_long$fn, levels=lt_fn)
+  # lt_wide = dplyr::mutate(reshape2::dcast(lt_long, year+sex+age~fn),
+  #                         year = as.numeric(as.character(year)),
+  #                         age  = as.numeric(as.character(age)))
+  # 
+  # ## BGN verification check
+  # tol = 0.1
+  # lx_src_wide = wpp_data$life_table$lx[wpp_data$life_table$lx$country_code == country_code,]
+  # lx_src_long = reshape2::melt(lx_src_wide,
+  #                              id.vars=c("sex", "age"),
+  #                              measure.vars=sprintf("%d", 1950:2100),
+  #                              variable.name="year",
+  #                              value.name="value")
+  # lx_src_long = dplyr::mutate(lx_src_long,
+  #                             year = as.numeric(as.character(year)),
+  #                             age  = as.numeric(as.character(age)))
+  # 
+  # lx_comp = dplyr::left_join(lx_src_long, lt_wide, by=c("year", "sex", "age"))
+  # lx_comp$difference = abs(lx_comp$value - lx_comp$lx)
+  # if (any(lx_comp$difference > 0.1)) {
+  #   warning(sprintf("Calculated number of survivors differs from UNPD estimate by more than %f people (isocode=%d)", tol, country_code))
+  # }
+  # ## END verification check
   
   ## Given a life table for one year and sex covering ages 0-99 and 100+, return
   ## a life table covering ages 0-80 and 81+
