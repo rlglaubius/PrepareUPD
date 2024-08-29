@@ -285,7 +285,7 @@ generate_lfts = function(country_code, wpp_data, compact=TRUE, year_final=2049) 
       year = lfts$year[1],
       sex  = lfts$sex[1],
       age  = 81,
-      mx   = lfts_81$lx / lfts_81$Tx, # obtained by solving Eqn. 13.30 of siegel2004book for m(x,inf)
+      mx   = 1.0 / lfts_81$ex, # lfts_81$lx / lfts_81$Tx, # obtained by solving Eqn. 13.30 of siegel2004book for m(x,inf)
       ax   = lfts_81$ex,
       qx   = 1.0,
       lx   = lfts_81$lx,
@@ -293,7 +293,7 @@ generate_lfts = function(country_code, wpp_data, compact=TRUE, year_final=2049) 
       Lx   = lfts_81$Tx,
       Tx   = lfts_81$Tx,
       ex   = lfts_81$ex,
-      Sx   = lfts_81$Tx / lfts_80$Tx)
+      Sx   = (1.0 - lfts_80$qx) * lfts_81$ex / lfts_80$ex) # Mathematically equivalent to lfts_81$Tx / lfts_80$Tx, but lfts_80$ex > 0 in 1994 Rwanda when lfts_80$Tx is not at the precision reported in WPP 2024 products. 
     
     return(rbind(lfts_0_80, lfts_81up))
   }

@@ -108,7 +108,8 @@ genupd = function(country_code, spec_locations, wpp_data = NULL, tag="24") {
   }
 }
 
-lapply(spec_locations$country_code, function(country_code) {
+# lapply(spec_locations$country_code, function(country_code) {
+lapply(c(646), function(country_code) {
   t0 = Sys.time()
   loc_name = spec_locations$country[spec_locations$country_code==country_code]
   cat(sprintf("Processing %0.0f (%s)...", country_code, loc_name))
