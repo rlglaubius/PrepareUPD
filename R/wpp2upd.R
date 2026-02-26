@@ -399,5 +399,6 @@ generate_migration = function(country_code, wpp_data, year_final=2049) {
   migr_aggr = data.table::as.data.table(migr_long)[,.(value=sum(value)),by=.(year,sex,age)]
   migr_aggr$sex   = as.integer(migr_aggr$sex) # convert from factor to integers
   migr_aggr$value = 1000 * migr_aggr$value    # convert from 1000s to numbers
-  return(migr_aggr[migr_aggr$year >= 1970 & migr_aggr$year <= year_final,])  
+  migr_aggr = migr_aggr[migr_aggr$year >= 1970 & migr_aggr$year <= year_final,]
+  return(migr_aggr[order(migr_aggr$year, migr_aggr$sex, migr_aggr$age),])
 }
